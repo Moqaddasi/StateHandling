@@ -484,10 +484,9 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
         dispatch(setChangedItemsKeys());
         dispatch(setCopiedItemsKeys());
 
-        if (!removeExceptions) {
-            if (!state.exceptionStructure?.length && state.copiedItem?.VoucherTempleteOverrideStructures?.length) {
-                dispatch(setExceptionStructure(state.copiedItem?.VoucherTempleteOverrideStructures));
-            }
+        // Update UI exception structure when using source's structure
+        if (!removeExceptions && state.copiedItem?.VoucherTempleteOverrideStructures?.length) {
+            dispatch(setExceptionStructure(state.copiedItem?.VoucherTempleteOverrideStructures));
         }
 
     }
