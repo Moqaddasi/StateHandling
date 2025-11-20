@@ -85,7 +85,7 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
                         dispatch(
                             setItem({
                                 ActionGuid: oldItem?.Id,
-                                VoucherTemplateArticles: articlesToSave,
+                                VoucherTemplateArticles: JSON.parse(JSON.stringify(articlesToSave)), // Deep clone to prevent shared references
                                 VoucherTempleteOverrideStructures: oldItemExceptionStructure,
                             }),
                         );
@@ -96,7 +96,9 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
                         const savedItem = getSelectedItemFromSavedItems(node);
 
                         if (savedItem) {
-                            state.handleSetArticles(savedItem?.VoucherTemplateArticles);
+                            // Deep clone to prevent shared references between state.items and tableStore
+                            const clonedArticles = JSON.parse(JSON.stringify(savedItem?.VoucherTemplateArticles || []));
+                            state.handleSetArticles(clonedArticles);
                             dispatch(setExceptionStructure(savedItem?.VoucherTempleteOverrideStructures));
                         } else if (state.mode === Mode.Edit) {
                             fetchVoucherTemplateArticles(node.Id);
@@ -464,7 +466,7 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
 
         const updatedItem = {
             ActionGuid: state.selectedItem?.Id,
-            VoucherTemplateArticles: articlesWithCopyFlag,
+            VoucherTemplateArticles: JSON.parse(JSON.stringify(articlesWithCopyFlag)), // Deep clone to prevent shared references
             VoucherTempleteOverrideStructures: removeExceptions
                 ? state.exceptionStructure
                 : (state.copiedItem?.VoucherTempleteOverrideStructures ?? state.exceptionStructure)
