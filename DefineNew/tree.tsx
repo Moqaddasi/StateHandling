@@ -160,8 +160,11 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
 
 
     function getContextMenuItems(options: DidgahTreeNode) {
+        // Check if the node is a leaf using available properties
+        const isLeaf = options.props?.isLeaf || options.props?.node?.IsLeaf || false;
+
         return [
-            options.props.isLeaf && (
+            isLeaf && (
                 <TreeExContextMenuItem
                     onClick={() => handleCopy(options.id)}
                     key='copy'
@@ -169,7 +172,7 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
                     text={Language('Copy')}
                     iconType='copy' />
             ),
-            options.props.isLeaf && state.copiedItem && state.copiedItem?.ActionGuid !== options.id && (
+            isLeaf && state.copiedItem && state.copiedItem?.ActionGuid !== options.id && (
                 <TreeExContextMenuItem
                     onClick={() => validateTableBeforePaste(options.id)}
                     key='paste'
@@ -278,6 +281,7 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
         const savedItem = state.items?.find(item => item.ActionGuid === actionGuid);
 
         if (savedItem) {
+            // Get original articles only (exclude copied ones)
             const originalArticles = savedItem.VoucherTemplateArticles
                 ?.filter(article => !article.IsCopy)
                 ?.map(article => ({
@@ -295,7 +299,9 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
 
             dispatch(setCopiedItem(copiedItem));
         } else {
-            if (state.selectedItem?.Id === actionGuid) {
+            // Only use handleGetArticles if the node being copied is the currently selected node
+            // AND it's not in the copiedItemsKeys (meaning it hasn't received pasted articles)
+            if (state.selectedItem?.Id === actionGuid && !state.copiedItemsKeys?.includes(actionGuid)) {
                 const currentArticles = state.handleGetArticles();
                 const originalArticles = currentArticles
                     .filter(article => !article.IsCopy)
@@ -323,6 +329,8 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
     }
 
     function handleRightClick(options: DidgahTreeNode) {
+        // Select the node being right-clicked to ensure proper context
+        // The context menu generation now uses options.props directly, so it will show immediately
         handleSelect(null, null, options.props?.['node']);
     }
 
@@ -330,14 +338,14 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
         if (actionGuid === state.copiedItem?.ActionGuid) {
             return;
         } else if (actionGuid === state.selectedItem?.Id) {
-            validateExceptionStructureBeforePaste();
+            validateExceptionStructureBeforePaste(actionGuid);
             return;
         }
 
         state.validateTable()
             .then((isValid: boolean) => {
                 if (isValid) {
-                    validateExceptionStructureBeforePaste();
+                    validateExceptionStructureBeforePaste(actionGuid);
                 } else {
                     Modal.error({
                         title: Language("Error"),
@@ -347,7 +355,7 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
             });
     }
 
-    function validateExceptionStructureBeforePaste() {
+    function validateExceptionStructureBeforePaste(destinationNodeId: string) {
 
         const sourceHasExceptions = state?.copiedItem?.VoucherTempleteOverrideStructures?.length > 0;
         const destinationHasExceptions = state.exceptionStructure?.length > 0;
@@ -355,17 +363,17 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
 
 
         if (!sourceHasExceptions && !destinationHasExceptions) {
-            handlePaste(false);
+            handlePaste(false, destinationNodeId);
             return;
         }
 
         if (sourceHasExceptions && !destinationHasExceptions) {
-            handlePaste(false);
+            handlePaste(false, destinationNodeId);
             return;
         }
 
         if (!sourceHasExceptions && destinationHasExceptions) {
-            handlePaste(false);
+            handlePaste(false, destinationNodeId);
             return;
         }
 
@@ -376,13 +384,13 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
             );
 
             if (areExceptionStructuresEqual) {
-                handlePaste(false);
+                handlePaste(false, destinationNodeId);
             } else {
                 Modal.confirm({
                     title: Language('Confirm'),
                     content: Language('ExceptionStructuresAreNotEqual'),
                     onOk() {
-                        handlePaste(true);
+                        handlePaste(true, destinationNodeId);
                     }
                 });
             }
@@ -430,22 +438,11 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
         });
     }
 
-    function handlePaste(removeExceptions: boolean) {
+    function handlePaste(removeExceptions: boolean, destinationNodeId: string) {
 
         const newArticles = generateNewRecords(state.copiedItem?.VoucherArticleTemplates, removeExceptions);
-        console.log('DBG1 newArticles length', newArticles?.length);
-        console.log('DBG1 newArticles sample refs equal to copiedItem?',
-            newArticles && state.copiedItem && newArticles[0] === state.copiedItem.VoucherArticleTemplates?.[0]);
-        console.log('DBG1 newArticles guids', newArticles?.map(a => a.Guid));
-        console.log('DBG1 copiedItem guids', state.copiedItem?.VoucherArticleTemplates?.map(a => a.Guid));
 
         state.handleAddArticles(newArticles ?? []);
-        const nodeItem = state.items?.find(i => i.ActionGuid === state.selectedItem?.Id);
-        console.log('DBG2 after handleAddArticles: handleGetArticles() ref equals nodeItem.VoucherTemplateArticles?',
-            state.handleGetArticles && nodeItem && state.handleGetArticles() === nodeItem.VoucherTemplateArticles);
-        console.log('DBG2 nodeItem guids', nodeItem?.VoucherTemplateArticles?.map(a => a.Guid));
-        console.log('DBG2 state.items guids map', state.items?.map(i => [i.ActionGuid, i.VoucherTemplateArticles?.length, i.VoucherTemplateArticles?.map(a => a.Guid)]));
-
         const currentNodeArticles = state.handleGetArticles() || [];
 
         const articlesWithCopyFlag = currentNodeArticles.map(article => {
@@ -458,24 +455,18 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
                 ArticleExceptionsList: article.ArticleExceptionsList ?? []
             };
 
-
             return updatedArticle;
         });
 
         const updatedItem = {
-            ActionGuid: state.selectedItem?.Id,
+            ActionGuid: destinationNodeId || state.selectedItem?.Id,
             VoucherTemplateArticles: articlesWithCopyFlag,
             VoucherTempleteOverrideStructures: removeExceptions
                 ? state.exceptionStructure
                 : (state.copiedItem?.VoucherTempleteOverrideStructures ?? state.exceptionStructure)
         };
 
-        console.log('DBG3 updatedItem.VoucherTemplateArticles guids', updatedItem.VoucherTemplateArticles?.map(a => a.Guid));
-        console.log('DBG3 updatedItem === some existing item?', state.items?.some(i => i.VoucherTemplateArticles === updatedItem.VoucherTemplateArticles));
-
         dispatch(setItem(updatedItem));
-        // inside reducer case SET_ITEM, at top:
-        console.log('REDUCER SET_ITEM before items guids map', state.items?.map(i => [i.ActionGuid, i.VoucherTemplateArticles?.length]));
 
         dispatch(setChangedItemsKeys());
         dispatch(setCopiedItemsKeys());
