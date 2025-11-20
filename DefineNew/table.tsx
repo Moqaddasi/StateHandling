@@ -155,7 +155,9 @@ export default function TableManager({ state, dispatch, mainInfoForm }: Props) {
   }
 
   function handleGetArticles() {
-    return tableStore.getAllDataExceptDeletedOne();
+    const data = tableStore.getAllDataExceptDeletedOne();
+    // Deep clone to prevent shared references across nodes
+    return data ? JSON.parse(JSON.stringify(data)) : [];
   }
 
   function handleSetArticles(data: VoucherTemplateArticleSaveModel[]) {
