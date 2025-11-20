@@ -421,12 +421,25 @@ export default function TreeManager({ guid, state, dispatch }: Props) {
 
     function generateNewRecords(records, removeExceptions: boolean) {
         return records?.map(record => {
+            const newArticleGuid = NewGuid();
+            const newVoucherArticleTemplateGuid = NewGuid();
+
+            // Copy and update article exceptions with new GUIDs and parent references
+            const newArticleExceptionsList = removeExceptions
+                ? []
+                : (record.ArticleExceptionsList ?? []).map(exception => ({
+                    ...exception,
+                    Guid: NewGuid(),  // Generate new GUID for the exception
+                    ParentGuid: newArticleGuid,  // Update parent to point to new article
+                    VoucherArticleTemplateGuid: newVoucherArticleTemplateGuid
+                }));
+
             const newRecord = {
                 ...record,
-                VoucherArticleTemplateGuid: NewGuid(),
-                Guid: NewGuid(),
+                VoucherArticleTemplateGuid: newVoucherArticleTemplateGuid,
+                Guid: newArticleGuid,
                 IsCopy: true,
-                ArticleExceptionsList: removeExceptions ? [] : (record.ArticleExceptionsList ?? [])
+                ArticleExceptionsList: newArticleExceptionsList
             };
 
             if (removeExceptions) {
